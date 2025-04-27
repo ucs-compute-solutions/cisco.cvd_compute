@@ -1,0 +1,4 @@
+---
+# tasks file for upgrade_ucs_fi_firmware
+- name: Upgrade FI Pair Firmware
+  ansible.builtin.include_tasks: "{{ upgrade_ucs_fi_firmware_related_operation }}.yml"

@@ -1,0 +1,10 @@
+---
+# defaults file for upgrade_ucs_fi_firmware
+upgrade_ucs_fi_firmware_related_operation: upgrade
+
+# API authentication
+upgrade_ucs_fi_firmware_api_uri: 'https://intersight.com/api/v1'
+upgrade_ucs_fi_firmware_validate_certs: true
+
+# Functionality
+upgrade_ucs_fi_firmware_distributable_type: "recommended"
