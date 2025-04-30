@@ -1,0 +1,18 @@
+---
+- name: Test Adding Vlan to a vNic in Intersight
+  hosts: localhost
+  vars:
+    add_ucs_vlan_to_vnic_api_private_key: "{{ 'INTERSIGHT_API_PRIVATE_KEY' }}"
+    add_ucs_vlan_to_vnic_api_key_id: "{{ 'INTERSIGHT_API_KEY_ID' }}"
+    add_ucs_vlan_to_vnic_name_of_fi_vlan_policy: "AC08-6454-VLAN-Policy"
+    add_ucs_vlan_to_vnic_vlan_multicast_policy: "AC08-MCAST"
+    add_ucs_vlan_to_vnic_vlan_id: 3002
+    add_ucs_vlan_to_vnic_vlan_name: "TEST-VLAN"
+    add_ucs_vlan_to_vnic_organization_name: "AC08-OCP"
+    add_ucs_vlan_to_vnic_ethernet_network_group_name: "AC08-OCP-iSCSI-NVMe-TCP-A-NetGrp-Policy"
+    add_ucs_vlan_to_vnic_name_of_domain_profile_list: [ "AC08-6454-Domain-Profile-A", "AC08-6454-Domain-Profile-B" ]
+  roles:
+    - add_ucs_vlan_to_vnic
+  tasks:
+    - name: Validate that vlan was added properly to the vNic
+      ansible.builtin.include_tasks: validate_vlan_to_vnic.yml
