@@ -1,0 +1,5 @@
+---
+- name: Process User Input Ports (Preserve Strings)
+  ansible.builtin.set_fact:
+    ucs_fi_port_query_ports_fixed: "{{ ucs_fi_port_query_ports_fixed + [{'port_id': item.port_id | string, 'slot_id': item.slot_id | int}] }}"
+  loop: "{{ ports | default([]) }}"
