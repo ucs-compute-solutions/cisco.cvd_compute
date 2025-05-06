@@ -1,0 +1,6 @@
+# Role defaults file
+rediscover_chassis_related_operation: rediscover
+
+# API authentication
+rediscover_chassis_api_uri: 'https://intersight.com/api/v1'
+rediscover_chassis_validate_certs: true

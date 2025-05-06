@@ -1,0 +1,9 @@
+---
+- name: Test Cisco UCS chassis rediscovery in Intersight
+  hosts: localhost
+  vars:
+    rediscover_chassis_api_private_key: "{{ lookup('env', 'INTERSIGHT_API_PRIVATE_KEY') }}"
+    rediscover_chassis_api_key_id: "{{ lookup('env', 'INTERSIGHT_API_KEY_ID') }}"
+    rediscover_chassis_chassis_name_list: ['chassis-name-1']
+  roles:
+    - rediscover_chassis
