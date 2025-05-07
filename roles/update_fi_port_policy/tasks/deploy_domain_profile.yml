@@ -1,0 +1,30 @@
+---
+- name: "Gather MOID from {{ domain_profile_name }}"
+  cisco.intersight.intersight_rest_api:
+    api_private_key: "{{ update_fi_port_policy_api_private_key | default(omit) }}"
+    api_key_id: "{{ update_fi_port_policy_api_key_id | default(omit) }}"
+    api_uri: "{{ update_fi_port_policy_api_uri | default('https://intersight.com/api/v1') }}"
+    validate_certs: "{{ update_fi_port_policy_validate_certs }}"
+    resource_path: /fabric/SwitchProfiles
+    query_params:
+      $filter: "Name eq '{{ domain_profile_name }}'"
+  register: domain_profile_res
+
+- name: Wait 5 seconds for port configuration to be applied.
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: "Deploy {{ domain_profile_name }}"
+  cisco.intersight.intersight_rest_api:
+    api_private_key: "{{ update_fi_port_policy_api_private_key | default(omit) }}"
+    api_key_id: "{{ update_fi_port_policy_api_key_id | default(omit) }}"
+    api_uri: "{{ update_fi_port_policy_api_uri | default('https://intersight.com/api/v1') }}"
+    validate_certs: "{{ update_fi_port_policy_validate_certs }}"
+    resource_path: /fabric/SwitchProfiles/{{ domain_profile_res.api_response.Moid }}
+    update_method: "post"
+    api_body: {
+      "Action": "Deploy",
+      "ConfigContext": {
+        "ControlAction": "Deploy"
+      }
+    }
