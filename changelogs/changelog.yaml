@@ -1,6 +1,8 @@
-#  Changelog for Ansible Validated Collection: cisco.cvd_compute 
-
+#  Changelog for Ansible Validated Collection: cisco.cvd_compute
 
 ## Version 1.0.0
-
-- Initial version
+releases:
+  1.0.0:
+    changes:
+      added:
+        - Initial version
