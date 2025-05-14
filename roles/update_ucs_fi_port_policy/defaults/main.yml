@@ -1,0 +1,9 @@
+# defaults file for update_ucs_fi_port_policy
+update_ucs_fi_port_policy_related_operation: update
+
+# API authentication
+update_ucs_fi_port_policy_api_uri: 'https://intersight.com/api/v1'
+update_ucs_fi_port_policy_validate_certs: true
+
+# Functionality
+update_ucs_fi_port_policy_slot_id_list: [1]

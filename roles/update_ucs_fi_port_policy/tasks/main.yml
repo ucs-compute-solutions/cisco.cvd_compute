@@ -1,0 +1,4 @@
+---
+# tasks file for update_ucs_fi_port_policy
+- name: Update Fabric Interconnect ports with server role - Day 2 Operation
+  ansible.builtin.include_tasks: "{{ update_ucs_fi_port_policy_related_operation }}.yml"
