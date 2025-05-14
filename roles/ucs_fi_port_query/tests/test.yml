@@ -1,0 +1,16 @@
+---
+- name: Query UCS Fabric Port Query
+  hosts: localhost
+  gather_facts: no
+  vars:
+    ucs_fi_port_query_api_private_key: "{{ key_private_key_file_path }}"
+    ucs_fi_port_query_api_key_id: "{{ your_api_key_id }}"
+    ucs_fi_port_query_api_uri: "https://intersight.com/api/v1"
+    ucs_fi_port_query_validate_certs: true
+    ucs_fi_port_query_fi_list: ["AC08-6454 FI-A", "AC08-6454 FI-B"]
+    port_range: 48-52
+    slot_id: 1
+  tasks:
+    - name: Run FI pre provision check 
+      ansible.builtin.include_role:
+        name: ucs_fi_port_query
