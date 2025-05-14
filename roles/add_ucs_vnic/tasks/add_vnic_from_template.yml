@@ -1,0 +1,136 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ add_ucs_vnic_api_private_key }}"
+      api_key_id: "{{ add_ucs_vnic_api_key_id }}"
+      api_uri: "{{ add_ucs_vnic_api_uri | default(omit) }}"
+      validate_certs: "{{ add_ucs_vnic_validate_certs | default(omit) }}"
+
+- name: Verify required variables are defined
+  ansible.builtin.fail:
+    msg: "{{ item }} is not defined"
+  when: "vars[item] is not defined"
+  loop:
+    - "add_ucs_vnic_server_profile_template_name"
+    - "add_ucs_vnic_template_name"
+    - "add_ucs_vnic_name"
+
+- name: Gather Server Profile Template info
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /server/ProfileTemplates
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vnic_server_profile_template_name }}'"
+  register: server_profile_template
+
+- name: Set fact for Server Profile Template Moid & Lan Connectivity Policy Moid
+  ansible.builtin.set_fact:
+    server_profile_template_moid: "{{ server_profile_template.api_response.Moid }}"
+    lan_connectivity_policy_moid: "{{ server_profile_template.api_response.PolicyBucket | selectattr('ObjectType', 'equalto', 'vnic.LanConnectivityPolicy')
+      | map(attribute='Moid') | first }}"
+
+- name: Gather vNIC Template info
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /vnic/VnicTemplates
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vnic_template_name }}'"
+  register: vnic_template
+
+# vNIC Template Moid to use for creating a new vNIC
+- name: Set fact for vNIC Template Moid
+  ansible.builtin.set_fact:
+    vnic_template_moid: "{{ vnic_template.api_response.Moid }}"
+
+- name: Get Next PCI Order
+  block:
+    - name: Get Lan Connectivity Policy By Moid
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /vnic/LanConnectivityPolicies
+        query_params:
+          $filter: "Moid eq '{{ lan_connectivity_policy_moid }}'"
+      register: lan_connectivity_policy
+
+    - name: Extract all vNICs Moid values
+      ansible.builtin.set_fact:
+        vnic_moid_list: "{{ lan_connectivity_policy.api_response.EthIfs | map(attribute='Moid') | list }}"
+
+    - name: Get vNICs properties
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /vnic/EthIfs
+        query_params:
+          $filter: "Moid eq '{{ item }}'"
+      loop: "{{ vnic_moid_list }}"
+      register: vnic_results
+
+    - name: Extract PCI Order values
+      ansible.builtin.set_fact:
+        pci_order_list: "{{ vnic_results.results | map(attribute='api_response.Order') | list }}"
+
+    - name: Set Next PCI Order Value
+      ansible.builtin.set_fact:
+        add_ucs_vnic_pci_order: "{{ pci_order_list | max + 1 }}"
+
+# Add the vNIC
+- name: Add vNIC from Template
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /bulk/MoCloners
+    api_body: "{{ {
+              'Sources': [{
+                'Moid': vnic_template_moid,
+                'ObjectType': 'vnic.VnicTemplate'
+              }],
+              'Targets': [{
+                'Name': add_ucs_vnic_name,
+                'MacAddressType': 'POOL',
+                'Placement': {
+                  'AutoSlotId': true,
+                  'AutoPciLink': true
+                },
+                'Order': add_ucs_vnic_pci_order | int,
+                'LanConnectivityPolicy': lan_connectivity_policy_moid,
+                'ObjectType': 'vnic.EthIf'
+              }],
+              'WorkflowNameSuffix': 'Add vNIC from Template'
+              } | to_json }}"
+    update_method: post
+  register: add_ucs_vnic_res
+
+# Deploy to Server Profiles
+- name: Extract associated Server Profiles
+  ansible.builtin.set_fact:
+    server_profiles_to_deploy: "{{ lan_connectivity_policy.api_response.Profiles | selectattr('ObjectType', 'equalto', 'server.Profile')
+      | map(attribute='Moid') | list }}"
+
+- name: Deploy All associated Server Profiles
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: "/server/Profiles/{{ item }}"
+    api_body:
+      {
+        "ScheduledActions":
+          [
+            {
+              "Action": "ConfigChange",
+              "ProceedOnReboot": false
+            },
+            {
+              "Action": "Deploy",
+              "ProceedOnReboot": true,
+              "ActionQualifier": {
+                "Scope":"all"
+              }
+            },
+            {
+              "Action": "Activate",
+              "ProceedOnReboot": true
+            }
+          ]
+      }
+    update_method: post
+  loop: "{{ server_profiles_to_deploy }}"
+  register: server_profile_activation

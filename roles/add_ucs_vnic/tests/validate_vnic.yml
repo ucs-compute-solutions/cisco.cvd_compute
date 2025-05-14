@@ -1,0 +1,58 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ add_ucs_vnic_api_private_key }}"
+      api_key_id: "{{ add_ucs_vnic_api_key_id }}"
+      api_uri: "{{ add_ucs_vnic_api_uri | default(omit) }}"
+      validate_certs: "{{ add_ucs_vnic_validate_certs | default(omit) }}"
+
+- name: Gather server profile template info
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /server/ProfileTemplates
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vnic_server_profile_template_name }}'"
+  register: server_profile_template
+
+- name: Set fact for Server Profile Template Moid & Lan Connectivity Policy Moid
+  ansible.builtin.set_fact:
+    server_profile_template_moid: "{{ server_profile_template.api_response.Moid }}"
+    lan_connectivity_policy_moid: "{{ server_profile_template.api_response.PolicyBucket | selectattr('ObjectType', 'equalto', 'vnic.LanConnectivityPolicy')
+      | map(attribute='Moid') | first }}"
+
+- name: Get Lan Connectivity Policy By Moid
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /vnic/LanConnectivityPolicies
+    query_params:
+      $filter: "Moid eq '{{ lan_connectivity_policy_moid }}'"
+  register: lan_connectivity_policy
+
+- name: Extract all vNICs Moid values
+  ansible.builtin.set_fact:
+    vnic_moid_list: "{{ lan_connectivity_policy.api_response.EthIfs | map(attribute='Moid') | list }}"
+
+- name: Get vNIC properties
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /vnic/EthIfs
+    query_params:
+      $filter: "Moid eq '{{ item }}'"
+  loop: "{{ vnic_moid_list }}"
+  register: vnic_results
+
+- name: Extract All vNICs Name
+  ansible.builtin.set_fact:
+    validate_vnic_name_list: "{{ vnic_results.results | map(attribute='api_response.Name') | list }}"
+
+- name: Debug
+  ansible.builtin.debug:
+    msg: "VALIDATE validate_vnic_name_list {{ validate_vnic_name_list }}"
+
+- name: Assert that add_ucs_vnic_name is in validate_vnic_name_list
+  ansible.builtin.assert:
+    that:
+      - "add_ucs_vnic_name in validate_vnic_name_list"
+    fail_msg: "'{{ add_ucs_vnic_name }}' is not present in validate_vnic_name_list"
+    success_msg: "'{{ add_ucs_vnic_name }}' is present in validate_vnic_name_list"

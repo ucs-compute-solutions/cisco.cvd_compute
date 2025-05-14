@@ -1,0 +1,14 @@
+---
+- name: Test Add vNIC from Template to an existing server
+  hosts: localhost
+  vars:
+    add_ucs_vnic_api_private_key: "{{ 'INTERSIGHT_API_PRIVATE_KEY' }}"
+    add_ucs_vnic_api_key_id: "{{ 'INTERSIGHT_API_KEY_ID' }}"
+    add_ucs_vnic_server_profile_template_name: "AC08-Server-Profile-Template"
+    add_ucs_vnic_template_name: "AC08-vNIC-Template"
+    add_ucs_vnic_name: "eno6"
+  roles:
+    - add_ucs_vnic
+  tasks:
+    - name: Validate that the vnic was added to the lan connectiviy policy
+      ansible.builtin.include_tasks: validate_vnic.yml
