@@ -1,0 +1,32 @@
+---
+- name: Fetch Organization MOID
+  cisco.intersight.intersight_rest_api:
+    api_private_key: "{{ add_vlan_to_vnic_api_private_key }}"
+    api_key_id: "{{ add_vlan_to_vnic_api_key_id }}"
+    api_uri: "{{ add_vlan_to_vnic_api_uri }}"
+    validate_certs: "{{ add_vlan_to_vnic_validate_certs }}"
+    resource_path: /organization/Organizations
+    query_params:
+      $filter: "Name eq '{{ add_vlan_to_vnic_organization_name }}'"
+  register: org_name_res
+
+- name: Fetch Ethernet Network Group Policy response
+  cisco.intersight.intersight_rest_api:
+    api_private_key: "{{ add_vlan_to_vnic_api_private_key }}"
+    api_key_id: "{{ add_vlan_to_vnic_api_key_id }}"
+    api_uri: "{{ add_vlan_to_vnic_api_uri }}"
+    validate_certs: "{{ add_vlan_to_vnic_validate_certs }}"
+    resource_path: /fabric/EthNetworkGroupPolicies
+    query_params:
+      $filter: "Name eq '{{ add_vlan_to_vnic_ethernet_network_group_name }}'"
+  register: ethernet_network_group_res
+
+- name: Split to a list of VLANs
+  ansible.builtin.set_fact:
+    vlan_list: "{{ (ethernet_network_group_res.api_response.VlanSettings.AllowedVlans | split(',')) }}"
+
+- name: Check that VLAN is in the list of VLANs -  vlan id number is {{ add_vlan_to_vnic_vlan_id }}
+  ansible.builtin.assert:
+    that:
+      - add_vlan_to_vnic_vlan_id | string in vlan_list
+    fail_msg: "VLAN {{ add_vlan_to_vnic_vlan_id }} is not in the list of VLANs"
