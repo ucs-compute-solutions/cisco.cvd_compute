@@ -1,0 +1,6 @@
+# Role defaults file
+deploy_ucs_server_profile_related_operation: deploy
+
+# API authentication
+deploy_ucs_server_profile_api_uri: 'https://intersight.com/api/v1'
+deploy_ucs_server_profile_validate_certs: true

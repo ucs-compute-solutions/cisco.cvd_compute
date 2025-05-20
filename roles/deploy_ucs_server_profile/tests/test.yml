@@ -1,0 +1,9 @@
+---
+- name: Test Cisco UCS deploy server profile in Intersight
+  hosts: localhost
+  vars:
+    deploy_ucs_server_profile_api_private_key: "{{ lookup('env', 'INTERSIGHT_API_PRIVATE_KEY') }}"
+    deploy_ucs_server_profile_api_key_id: "{{ lookup('env', 'INTERSIGHT_API_KEY_ID') }}"
+    deploy_ucs_server_profile_server_profiles_list: ['worker0', 'worker1', 'worker2', 'control0', 'control1', 'control2']
+  roles:
+    - deploy_ucs_server_profile
