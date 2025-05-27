@@ -1,0 +1,13 @@
+---
+- name: Verify required variables are defined and not empty
+  ansible.builtin.fail:
+    msg: "{{ item }} is not defined or empty"
+  when: "vars[item] is not defined or (vars[item] | length == 0)"
+  loop:
+    - "deploy_ucs_server_profile_server_profiles_list"
+
+- name: Deploy sever profile per profile in the list
+  ansible.builtin.include_tasks: deploy_server_profile.yml
+  loop: "{{ deploy_ucs_server_profile_server_profiles_list }}"
+  loop_control:
+    loop_var: server_profile_name
