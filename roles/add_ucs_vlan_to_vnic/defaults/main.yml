@@ -1,0 +1,6 @@
+# defaults file for add_ucs_vlan_to_vnic
+add_ucs_vlan_to_vnic_related_operation: add
+
+# API authentication
+add_ucs_vlan_to_vnic_api_uri: 'https://intersight.com/api/v1'
+add_ucs_vlan_to_vnic_validate_certs: true
