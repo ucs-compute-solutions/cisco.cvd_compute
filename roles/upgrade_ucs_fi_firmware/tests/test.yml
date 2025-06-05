@@ -1,0 +1,17 @@
+---
+- name: Test FI firmware upgrade
+  hosts: localhost
+  vars:
+    upgrade_ucs_fi_firmware_api_private_key: "{{ 'INTERSIGHT_API_PRIVATE_KEY' }}"
+    upgrade_ucs_fi_firmware_api_key_id: "{{ 'INTERSIGHT_API_KEY_ID' }}"
+    upgrade_ucs_fi_firmware_fi_list: ["AC08-6454 FI-A", "AC08-6454 FI-B"]
+    upgrade_ucs_fi_firmware_distributable_type: "latest"
+  gather_facts: false
+  roles:
+    - upgrade_ucs_fi_firmware
+  tasks:
+    - name: Validate the upgrade
+      ansible.builtin.include_tasks: validate_upgrade.yml
+      loop: "{{ upgrade_ucs_fi_firmware_fi_list }}"
+      loop_control:
+        loop_var: fi_name
