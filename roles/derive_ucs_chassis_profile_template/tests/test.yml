@@ -1,0 +1,17 @@
+---
+- name: Test derive UCS Chassis Profile from UCS Chassis Profile Template
+  hosts: localhost
+  vars:
+    derive_ucs_chassis_profile_template_api_private_key: "{{ 'INTERSIGHT_API_PRIVATE_KEY' }}"
+    derive_ucs_chassis_profile_template_api_key_id: "{{ 'INTERSIGHT_API_KEY_ID' }}"
+    derive_ucs_chassis_profile_template_chassis_serial_number: "MOCK2630D74C"
+    derive_ucs_chassis_profile_template_description: "Custom Profile"
+    derive_ucs_chassis_profile_template_chassis_profile_template_name: "AC08-6454-X9508-Template"
+    derive_ucs_chassis_profile_template_tags:
+      - Key: "configmode"
+        Value: "ansible"
+  roles:
+    - derive_ucs_chassis_profile_template
+  tasks:
+    - name: Validate that the profile got correctly attached
+      ansible.builtin.include_tasks: validate_profile.yml
