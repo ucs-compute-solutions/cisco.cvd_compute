@@ -1,0 +1,43 @@
+---
+- name: Verify required variables are defined and not empty
+  ansible.builtin.fail:
+    msg: "{{ item }} is not defined or empty"
+  when: "vars[item] is not defined or (vars[item] | length == 0)"
+  loop:
+    - "update_ucs_fi_port_policy_port_id_list"
+    - "update_ucs_fi_port_policy_port_policy_list"
+    - "update_ucs_fi_port_policy_name_of_domain_profile_list"
+
+- name: Determine format type (with or without '/')
+  ansible.builtin.set_fact:
+    breakout_port_format: "{{ update_ucs_fi_port_policy_port_id_list | select('search', '^\\d+/\\d+$') | list | length > 0 }}"
+    regular_port_format: "{{ update_ucs_fi_port_policy_port_id_list | select('search', '^\\d+$') | list | length > 0 }}"
+
+- name: Fail if the list contains a mix of formats
+  ansible.builtin.fail:
+    msg: "Error: configure_server_ports_port_id_list must have only 'XX/YY' format or only port numbers, not both!"
+  when: breakout_port_format and regular_port_format
+
+- name: Verify dependency is met between variables
+  ansible.builtin.fail:
+    msg: "configure_server_ports_port_id_list has breakout option format and configure_server_ports_breakout_option is not defined
+     OR configure_server_ports_port_id_list has regular port number format and configure_server_ports_breakout_option is defined."
+  when: breakout_port_format is true and update_ucs_fi_port_policy_breakout_option is not defined
+    or breakout_port_format is false and update_ucs_fi_port_policy_breakout_option is defined
+
+- name: Verify configure_server_ports_breakout_option value is correct if defined.
+  ansible.builtin.fail:
+    msg: "configure_server_ports_breakout_option value is not correct. Please set it to BreakoutEthernet10G, BreakoutEthernet25G or remove it."
+  when: update_ucs_fi_port_policy_breakout_option is defined and update_ucs_fi_port_policy_breakout_option not in ['BreakoutEthernet10G', 'BreakoutEthernet25G']
+
+- name: Update port policies
+  ansible.builtin.include_tasks: update_port_policy.yml
+  loop: "{{ update_ucs_fi_port_policy_port_policy_list }}"
+  loop_control:
+    loop_var: policy_name
+
+- name: Deploy domain profiles
+  ansible.builtin.include_tasks: deploy_domain_profile.yml
+  loop: "{{ update_ucs_fi_port_policy_name_of_domain_profile_list }}"
+  loop_control:
+    loop_var: domain_profile_name

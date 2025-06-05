@@ -1,0 +1,17 @@
+---
+- name: Test update UCS Fabric Interconnect port role as server port
+  hosts: localhost
+  vars:
+    update_ucs_fi_port_policy_api_private_key: "{{ 'INTERSIGHT_API_PRIVATE_KEY'}}"
+    update_ucs_fi_port_policy_api_key_id: "{{ 'INTERSIGHT_API_KEY_ID' }}"
+    update_ucs_fi_port_policy_port_id_list: [5, 6, 7, 8]
+    update_ucs_fi_port_policy_port_policy_list: ["AC08-6454-A-Port-Policy", "AC08-6454-B-Port-Policy"]
+    update_ucs_fi_port_policy_name_of_domain_profile_list: ["AC08-6454-Domain-Profile-A", "AC08-6454-Domain-Profile-B"]
+  roles:
+    - update_ucs_fi_port_policy
+  tasks:
+    - name: Validate that ports got correctly configured per policy
+      ansible.builtin.include_tasks: validate_ports.yml
+      loop: "{{ update_ucs_fi_port_policy_port_policy_list }}"
+      loop_control:
+        loop_var: policy_name
