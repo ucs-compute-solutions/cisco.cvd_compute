@@ -1,0 +1,4 @@
+---
+# tasks file for add_ucs_vnic
+- name: Add vNIC from Template to an existing server - Day 2 Operation
+  ansible.builtin.include_tasks: "{{ add_ucs_vnic_related_operation }}.yml"
