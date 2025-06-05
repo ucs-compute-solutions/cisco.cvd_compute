@@ -1,0 +1,4 @@
+---
+# Tasks file for the chassis_rediscover role
+- name: Rediscover UCS Chassis - Day-2 Operation
+  ansible.builtin.include_tasks: "{{ rediscover_ucs_chassis_related_operation }}.yml"
