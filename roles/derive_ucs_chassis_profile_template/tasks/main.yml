@@ -1,0 +1,4 @@
+---
+# tasks file for derive_ucs_chassis_profile_template
+- name: Derive from UCS Chassis Profile Template - Day 2 Operation
+  ansible.builtin.include_tasks: "{{ derive_ucs_chassis_profile_template_related_operation }}.yml"

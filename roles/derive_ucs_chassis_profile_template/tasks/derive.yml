@@ -1,0 +1,91 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ derive_ucs_chassis_profile_template_api_private_key | default(omit) }}"
+      api_key_id: "{{ derive_ucs_chassis_profile_template_api_key_id | default(omit) }}"
+      api_uri: "{{ derive_ucs_chassis_profile_template_api_uri | default(omit) }}"
+      validate_certs: "{{ derive_ucs_chassis_profile_template_validate_certs | default(omit) }}"
+
+- name: Verify required variables are defined and not empty
+  ansible.builtin.fail:
+    msg: "{{ item }} is not defined or empty"
+  when: "vars[item] is not defined or (vars[item] | length == 0)"
+  loop:
+    - "derive_ucs_chassis_profile_template_chassis_serial_number"
+    - "derive_ucs_chassis_profile_template_chassis_profile_template_name"
+
+- name: Gather profile template info
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /chassis/ProfileTemplates
+    query_params:
+      $filter: "Name eq '{{ derive_ucs_chassis_profile_template_chassis_profile_template_name }}'"
+  register: profile_template_res
+
+- name: Get Moid for Cisco UCS Chassis
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /equipment/Chasses
+    query_params:
+      $filter: "Serial eq '{{ derive_ucs_chassis_profile_template_chassis_serial_number }}'"
+  register: chassis_res
+
+- name: Check if UCS Chassis Profile already exists
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /chassis/Profiles
+    query_params:
+      $filter: "Name eq '{{ chassis_res.api_response.Name }}'"
+  register: check_chassis_profile_res
+
+- name: Verify that UCS Chassis Profile does not already exist
+  when: check_chassis_profile_res.api_response != {}
+  ansible.builtin.fail:
+    msg: "Chassis profile {{ chassis_res.api_response.Name }} already exists"
+
+- name: Derive UCS Chassis Profile from UCS Chassis Profile Template
+  vars:
+    name_of_ucs_chassis_profile: "{{ chassis_res.api_response.Name }}"
+    base_target: {
+      "Name": "{{ name_of_ucs_chassis_profile }}",
+      "ObjectType": "chassis.Profile",
+      "AssignedChassis": {
+        "Moid": "{{ chassis_res.api_response.Moid }}",
+        "ObjectType": "equipment.Chassis"
+      },
+      "Organization": {
+        "Moid": "{{ profile_template_res.api_response.Organization.Moid }}",
+        "ObjectType": "organization.Organization"
+      }
+    }
+    target_with_tags: "{{ base_target | combine({'Tags': derive_ucs_chassis_profile_template_tags}) if derive_ucs_chassis_profile_template_tags is defined
+     and derive_ucs_chassis_profile_template_tags | length > 0 else base_target }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /bulk/MoCloners
+    api_body: {
+      Sources: [
+        {
+          "Moid": "{{ profile_template_res.api_response.Moid }}",
+          "ObjectType": "chassis.ProfileTemplate"
+        }
+      ],
+      Targets: [
+        "{{ target_with_tags | combine({'Description': derive_ucs_chassis_profile_template_description})
+        if derive_ucs_chassis_profile_template_description is defined
+        and derive_ucs_chassis_profile_template_description | length > 0 else target_with_tags }}"
+      ]
+    }
+    state: present
+  register: new_chassis_profile_res
+
+- name: Deploy UCS Chassis Profile
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /chassis/Profiles/{{ new_chassis_profile_res.api_response.Responses[0].Body.Moid }}
+    update_method: "post"
+    api_body: {
+      Action: "Deploy"
+    }
+  register: deploy_res

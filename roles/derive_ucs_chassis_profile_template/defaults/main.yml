@@ -1,0 +1,8 @@
+# defaults file for derive_ucs_chassis_profile_template
+derive_ucs_chassis_profile_template_related_operation: derive
+
+# API authentication
+derive_ucs_chassis_profile_template_api_uri: 'https://intersight.com/api/v1'
+derive_ucs_chassis_profile_template_validate_certs: true
+
+# Functionality

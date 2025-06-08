@@ -1,0 +1,37 @@
+---
+- name: Set api info
+  vars:
+    api_info: &api_info
+      api_private_key: "{{ derive_ucs_chassis_profile_template_api_private_key | default(omit) }}"
+      api_key_id: "{{ derive_ucs_chassis_profile_template_api_key_id | default(omit) }}"
+      api_uri: "{{ derive_ucs_chassis_profile_template_api_uri | default(omit) }}"
+      validate_certs: "{{ derive_ucs_chassis_profile_template_validate_certs | default(omit) }}"
+
+  block:
+    - name: Get Moid for Cisco UCS-X Series Chassis
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /equipment/Chasses
+        query_params:
+          $filter: "Serial eq '{{ derive_ucs_chassis_profile_template_chassis_serial_number }}'"
+      register: chassis_res
+
+    - name: Check if chassis profile already exists
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /chassis/Profiles
+        query_params:
+          $filter: "Name eq '{{ chassis_res.api_response.Name }}'"
+      register: check_chassis_profile_res
+
+- name: Assert that chassis profile exists
+  ansible.builtin.assert:
+    that:
+      - check_chassis_profile_res.api_response != {}
+    fail_msg: "Chassis profile does not exist"
+
+- name: Assert that chassis profile is attached
+  ansible.builtin.assert:
+    that:
+      - check_chassis_profile_res.api_response.AssignedChassis.Moid == chassis_res.api_response.Moid
+    fail_msg: "Profile {{ chassis_res.api_response.Name }} is not attached to chassis {{ chassis_res.api_response.Name }}"
