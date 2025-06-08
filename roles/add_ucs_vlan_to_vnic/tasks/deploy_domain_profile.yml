@@ -1,0 +1,32 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ add_ucs_vlan_to_vnic_api_private_key | default(omit) }}"
+      api_key_id: "{{ add_ucs_vlan_to_vnic_api_key_id | default(omit) }}"
+      api_uri: "{{ add_ucs_vlan_to_vnic_api_uri | default(omit) }}"
+      validate_certs: "{{ add_ucs_vlan_to_vnic_validate_certs | default(omit) }}"
+
+- name: "Gather MOID from {{ domain_profile_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/SwitchProfiles
+    query_params:
+      $filter: "Name eq '{{ domain_profile_name }}'"
+  register: domain_profile_res
+
+- name: Wait 5 seconds for port configuration to be applied.
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: "Deploy {{ domain_profile_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/SwitchProfiles/{{ domain_profile_res.api_response.Moid }}
+    update_method: "post"
+    api_body: {
+      "Action": "Deploy",
+      "ConfigContext": {
+        "ControlAction": "Deploy"
+      }
+    }

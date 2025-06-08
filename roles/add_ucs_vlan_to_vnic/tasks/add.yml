@@ -1,0 +1,110 @@
+---
+- name: Verify required variables are defined and not empty
+  ansible.builtin.fail:
+    msg: "{{ item }} is not defined or empty"
+  when: "vars[item] is not defined or (vars[item] | default('') | string | length == 0)"
+  loop:
+    - "add_ucs_vlan_to_vnic_name_of_fi_vlan_policy"
+    - "add_ucs_vlan_to_vnic_vlan_multicast_policy"
+    - "add_ucs_vlan_to_vnic_vlan_id"
+    - "add_ucs_vlan_to_vnic_vlan_name"
+    - "add_ucs_vlan_to_vnic_organization_name"
+    - "add_ucs_vlan_to_vnic_ethernet_network_group_name"
+    - "add_ucs_vlan_to_vnic_name_of_domain_profile_list"
+
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ add_ucs_vlan_to_vnic_api_private_key | default(omit) }}"
+      api_key_id: "{{ add_ucs_vlan_to_vnic_api_key_id | default(omit) }}"
+      api_uri: "{{ add_ucs_vlan_to_vnic_api_uri | default(omit) }}"
+      validate_certs: "{{ add_ucs_vlan_to_vnic_validate_certs | default(omit) }}"
+
+- name: Fetch FI VLAN  Policy MOID
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/EthNetworkPolicies
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vlan_to_vnic_name_of_fi_vlan_policy }}'"
+  register: fi_vlan_policy_res
+
+- name: Fetch FI VLAN Multicast Policy MOID
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/MulticastPolicies
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vlan_to_vnic_vlan_multicast_policy }}'"
+  register: fi_vlan_multicast_policy_res
+
+- name: Add VLAN to FI
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /bulk/Requests
+    update_method: "post"
+    api_body: {
+      "Verb": "POST",
+      "Uri": "/v1/fabric/Vlans",
+      "Requests": [
+        {
+          "ObjectType": "bulk.RestSubRequest",
+          "Body": {
+            "Name": "{{ add_ucs_vlan_to_vnic_vlan_name }}",
+            "VlanId": "{{ add_ucs_vlan_to_vnic_vlan_id }}",
+            "SharingType": "None",
+            "PrimaryVlanId": 0,
+            "MulticastPolicy": "{{ fi_vlan_multicast_policy_res.api_response.Moid }}",
+            "AutoAllowOnUplinks": true,
+            "IsNative": false,
+            "EthNetworkPolicy": "{{ fi_vlan_policy_res.api_response.Moid }}"
+          }
+        }
+      ]
+    }
+  register: fi_vlan_res
+
+- name: Deploy domain profiles
+  ansible.builtin.include_tasks: deploy_domain_profile.yml
+  loop: "{{ add_ucs_vlan_to_vnic_name_of_domain_profile_list }}"
+  loop_control:
+    loop_var: domain_profile_name
+
+- name: Fetch Organization MOID
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /organization/Organizations
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vlan_to_vnic_organization_name }}'"
+  register: org_name_res
+
+- name: Fetch Ethernet Network Group Policy response
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/EthNetworkGroupPolicies
+    query_params:
+      $filter: "Name eq '{{ add_ucs_vlan_to_vnic_ethernet_network_group_name }}'"
+  register: ethernet_network_group_res
+
+- name: Combine VLANs
+  ansible.builtin.set_fact:
+    combined_vlans: "{{ (ethernet_network_group_res.api_response.VlanSettings.AllowedVlans | split(',')) + [add_ucs_vlan_to_vnic_vlan_id | string] | unique }}"
+
+- name: Convert VLANs to a string
+  ansible.builtin.set_fact:
+    string_vlans: "{{  combined_vlans | join(',') }}"
+
+- name: Add the VLAN to the vNic
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/EthNetworkGroupPolicies/{{ ethernet_network_group_res.api_response.Moid }}
+    update_method: "post"
+    api_body: {
+      "Organization": {
+        "ObjectType": "organization.Organization",
+        "Moid": "{{ org_name_res.api_response.Moid }}"
+      },
+      "VlanSettings": {
+        "AllowedVlans": "{{ string_vlans }}",
+        "QinqEnabled": false
+      }
+    }
+  register: eth_grp_policy_res
