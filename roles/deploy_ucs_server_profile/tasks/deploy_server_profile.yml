@@ -1,0 +1,91 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ deploy_ucs_server_profile_api_private_key | default(omit) }}"
+      api_key_id: "{{ deploy_ucs_server_profile_api_key_id | default(omit) }}"
+      api_uri: "{{ deploy_ucs_server_profile_api_uri | default(omit) }}"
+      validate_certs: "{{ deploy_ucs_server_profile_validate_certs | default(omit) }}"
+
+- name: Get Server profile MOID - {{ server_profile_name }}
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: "/server/Profiles"
+    query_params:
+      $filter: "Name eq '{{ server_profile_name }}'"
+  register: server_profile_res
+
+- name: Deploy server profile without reboot - {{ server_profile_name }}
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: "/server/Profiles/{{ server_profile_res.api_response.Moid }}"
+    api_body:
+      {
+        "ScheduledActions":
+          [
+            {
+              "Action": "Deploy",
+              "ProceedOnReboot": false,
+              "ActionQualifier": {
+                "Scope":"all"
+              }
+            }
+          ]
+      }
+    update_method: post
+  register: server_profile_deploy
+  when:
+    - deploy_ucs_server_profile_deploy_policies is defined
+    - deploy_ucs_server_profile_deploy_policies
+    - not deploy_ucs_server_profile_reboot_for_activation
+
+- name: Reboot server profile for activation without deploy - {{ server_profile_name }}
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: "/server/Profiles/{{ server_profile_res.api_response.Moid }}"
+    api_body:
+      {
+        "ScheduledActions": [
+          {
+            "Action": "Deploy",
+            "ProceedOnReboot": false
+          },
+          {
+            "Action": "Activate",
+            "ProceedOnReboot": true
+          }
+        ]
+      }
+    update_method: post
+  register: server_profile_reboot_activation
+  when:
+    - deploy_ucs_server_profile_reboot_for_activation is defined
+    - deploy_ucs_server_profile_reboot_for_activation
+    - not deploy_ucs_server_profile_deploy_policies
+
+- name: Reboot server profile for activation and deploy - {{ server_profile_name }}
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: "/server/Profiles/{{ server_profile_res.api_response.Moid }}"
+    api_body:
+      {
+        "ScheduledActions": [
+          {
+            "Action": "Deploy",
+            "ProceedOnReboot": false,
+            "ActionQualifier": {
+              "Scope": "all"
+            }
+          },
+          {
+            "Action": "Activate",
+            "ProceedOnReboot": true
+          }
+        ]
+      }
+    update_method: post
+  register: server_profile_reboot_activation
+  when:
+    - deploy_ucs_server_profile_reboot_for_activation is defined
+    - deploy_ucs_server_profile_reboot_for_activation
+    - deploy_ucs_server_profile_deploy_policies
