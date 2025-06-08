@@ -1,0 +1,147 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ upgrade_ucs_fi_firmware_api_private_key | default(omit) }}"
+      api_key_id: "{{ upgrade_ucs_fi_firmware_api_key_id | default(omit) }}"
+      api_uri: "{{ upgrade_ucs_fi_firmware_api_uri | default(omit) }}"
+      validate_certs: "{{ upgrade_ucs_fi_firmware_validate_certs | default(omit) }}"
+
+- name: Retrieve Fabric Interconnect information
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /network/ElementSummaries
+    query_params:
+      $filter: "SwitchType eq 'FabricInterconnect' and Name eq '{{ fi_name }}'"
+  register: fi_info
+
+- name: Retrieve FI Firmware Distributable According to Users Choice
+  block:
+    - name: Retrieve Recommended FI Firmware Distributable
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /firmware/Distributables
+        query_params:
+          $filter: "Tags.Key eq 'cisco.meta.distributabletype' and Tags.Value eq 'IMMFABRIC' and RecommendedBuild eq 'Y' and
+          Tags.Key eq 'cisco.meta.repositorytype' and Tags.Value eq 'IntersightCloud' and
+          SupportedModels in ('{{ fi_info.api_response.Model }}') and SharedScope eq 'shared' and (ImportState eq Imported or ImportState eq ReadyForImport)"
+          $orderby: "Version desc"
+          $top: 1
+      register: recommended_firmware_distributable
+      when: upgrade_ucs_fi_firmware_distributable_type == 'recommended'
+
+    - name: Retrieve Latest FI Firmware Distributable
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /firmware/Distributables
+        query_params:
+          $filter: "Tags.Key eq 'cisco.meta.distributabletype' and Tags.Value eq 'IMMFABRIC' and
+          Tags.Key eq 'cisco.meta.repositorytype' and Tags.Value eq 'IntersightCloud' and
+          SupportedModels in ('{{ fi_info.api_response.Model }}') and SharedScope eq 'shared' and (ImportState eq Imported or ImportState eq ReadyForImport)"
+          $orderby: "Version desc"
+          $top: 1
+      register: latest_firmware_distributable
+      when: upgrade_ucs_fi_firmware_distributable_type  == "latest"
+
+    - name: Retrieve FI Firmware Distributable With Specific Version
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /firmware/Distributables
+        query_params:
+          $filter: "Tags.Key eq 'cisco.meta.distributabletype' and Tags.Value eq 'IMMFABRIC' and
+          Version eq '{{ upgrade_ucs_fi_firmware_distributable_version }}' and
+          Tags.Key eq 'cisco.meta.repositorytype' and Tags.Value eq 'IntersightCloud' and
+          SupportedModels in ('{{ fi_info.api_response.Model }}') and SharedScope eq 'shared' and (ImportState eq Imported or ImportState eq ReadyForImport)"
+          $orderby: "Version desc"
+          $top: 1
+      register: specific_firmware_distributable
+      when: upgrade_ucs_fi_firmware_distributable_type  == "specific_version" and upgrade_ucs_fi_firmware_distributable_version is defined
+
+    - name: Fail if given firmware version was not found
+      ansible.legacy.fail:
+        msg: "The given version was not found."
+      when: upgrade_ucs_fi_firmware_distributable_type == "specific_version" and specific_firmware_distributable.api_response == {}
+
+    - name: Set final firmware variable based on which task ran
+      ansible.builtin.set_fact:
+        firmware_distributable: "{{ recommended_firmware_distributable if (recommended_firmware_distributable is defined and
+        recommended_firmware_distributable.api_response is defined)
+        else (latest_firmware_distributable if (latest_firmware_distributable is defined and
+        latest_firmware_distributable.api_response is defined)
+        else (specific_firmware_distributable if (specific_firmware_distributable is defined and
+        specific_firmware_distributable.api_response is defined)
+        else firmware_distributable)) }}"
+
+- name: Check if the chosen version is different from the current version
+  ansible.builtin.set_fact:
+    versions_are_different: "{{ firmware_distributable.api_response.Version != fi_info.api_response.BundleVersion }}"
+
+- name: Run the upgrade
+  when: versions_are_different
+  block:
+    - name: Upgrade Firmware for Fabric Interconnects
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /firmware/SwitchUpgrades
+        update_method: post
+        api_body: {
+          "DirectDownload": {
+            "Upgradeoption": "sd_upgrade_only"
+          },
+          "Distributable": "{{ firmware_distributable.api_response.Moid }}",
+          "NetworkElements": [
+            {
+              "ObjectType": "network.Element",
+              "Moid": "{{ fi_info.api_response.Moid }}"
+            }
+          ],
+          "UpgradeType": "direct_upgrade",
+          "SkipWaitForIoPathConnectivity": false
+        }
+      register: firmware_upgrade_resp
+
+    # Wait for upgrade to complete
+    - name: Check FI firmware upgrade status pre FI upgrade
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /firmware/UpgradeStatuses
+        query_params:
+          $filter: "Moid eq '{{ firmware_upgrade_resp.api_response.UpgradeStatus.Moid }}'"
+      register: status_resp
+      until: status_resp.api_response.Overallstatus == 'pending'
+      # 60 minutes to allow download/update to complete
+      retries: 60
+      delay: 60
+      when:
+        - firmware_upgrade_resp.api_response is defined
+
+    - name: Accept Upgrade
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /workflow/WorkflowInfos/{{ status_resp.api_response.Workflow.Moid }}
+        update_method: post
+        api_body: {
+          "TaskInfoUpdate": {
+            "Name": "WaitTaskSingleFI",
+            "Status": "Completed"
+          }
+        }
+      register: firmware_upgrade_continue_resp
+      # 15 minutes to allow request status kick-in
+      retries: 15
+      delay: 60
+
+    # Wait for upgrade to complete
+    - name: Check FI firmware upgrade status till it finishes successfully
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /firmware/UpgradeStatuses
+        query_params:
+          $filter: "Moid eq '{{ firmware_upgrade_resp.api_response.UpgradeStatus.Moid }}'"
+      register: status_resp
+      until: status_resp.api_response.Overallstatus == 'success'
+      # 60 minutes to allow download/update to complete
+      retries: 60
+      delay: 60
+      when:
+        - firmware_upgrade_resp.api_response is defined
