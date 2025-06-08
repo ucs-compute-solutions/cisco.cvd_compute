@@ -1,0 +1,26 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ rediscover_ucs_chassis_api_private_key | default(omit) }}"
+      api_key_id: "{{ rediscover_ucs_chassis_api_key_id | default(omit) }}"
+      api_uri: "{{ rediscover_ucs_chassis_api_uri | default(omit) }}"
+      validate_certs: "{{ rediscover_ucs_chassis_validate_certs | default(omit) }}"
+
+- name: "Get chassis Id Moid for {{ chassis_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /equipment/ChassisIdentities
+    query_params:
+      $filter: "Name eq '{{ chassis_name }}'"
+  register: chassis_id_res
+
+- name: "Execute chassis rediscovery for {{ chassis_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /equipment/ChassisIdentities/{{ chassis_id_res.api_response.Moid }}
+    update_method: "post"
+    api_body: {
+      "AdminAction": "Reack"
+    }
+  register: chassis_rediscovery_res

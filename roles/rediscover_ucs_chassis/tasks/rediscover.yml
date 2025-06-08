@@ -1,0 +1,13 @@
+---
+- name: Verify required variables are defined and not empty
+  ansible.builtin.fail:
+    msg: "{{ item }} is not defined or empty"
+  when: "vars[item] is not defined or (vars[item] | length == 0)"
+  loop:
+    - "rediscover_ucs_chassis_chassis_name_list"
+
+- name: Verify the Cisco UCS chassis name(s)
+  ansible.builtin.include_tasks: rediscover_chassis.yml
+  loop: "{{ rediscover_ucs_chassis_chassis_name_list }}"
+  loop_control:
+    loop_var: chassis_name
