@@ -1,0 +1,43 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ update_ucs_fi_port_policy_api_private_key | default(omit) }}"
+      api_key_id: "{{ update_ucs_fi_port_policy_api_key_id | default(omit) }}"
+      api_uri: "{{ update_ucs_fi_port_policy_api_uri | default(omit) }}"
+      validate_certs: "{{ update_ucs_fi_port_policy_validate_certs | default(omit) }}"
+
+- name: "Get port policy {{ policy_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/PortPolicies
+    query_params:
+      $filter: "Name eq '{{ policy_name }}'"
+  register: port_policy_res
+
+- name: "Ports in port policy {{ policy_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/ServerRoles
+    query_params:
+      $filter: "PortPolicy.Moid eq '{{ port_policy_res.api_response.Moid }}'"
+    return_list: true
+  register: port_configuring_res
+
+- name: Assert that all ports are configured
+  vars:
+    all_port_ids: "{{ port_configuring_res.api_response | map(attribute='PortId') | list }}"
+  ansible.builtin.assert:
+    that:
+      - "{{ item }} in all_port_ids"
+  loop: "{{ update_ucs_fi_port_policy_port_id_list }}"
+  when: regular_port_format is defined and regular_port_format
+
+- name: Assert that all ports are Aggregate ports configured
+  vars:
+    all_aggr_port_ids: "{{ port_configuring_res.api_response | map(attribute='AggregatePortId') | list }}"
+  ansible.builtin.assert:
+    that:
+      - "{{ item }} in all_aggr_port_ids"
+  loop: "{{ aggregate_ports }}"
+  when: breakout_port_format is defined and breakout_port_format

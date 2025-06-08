@@ -1,0 +1,70 @@
+---
+- name: Define anchor for Intersight API login info
+  ansible.builtin.set_fact:
+    api_info: &api_info
+      api_private_key: "{{ update_ucs_fi_port_policy_api_private_key | default(omit) }}"
+      api_key_id: "{{ update_ucs_fi_port_policy_api_key_id | default(omit) }}"
+      api_uri: "{{ update_ucs_fi_port_policy_api_uri | default(omit) }}"
+      validate_certs: "{{ update_ucs_fi_port_policy_validate_certs | default(omit) }}"
+
+- name: "Get port policy {{ policy_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/PortPolicies
+    query_params:
+      $filter: "Name eq '{{ policy_name }}'"
+  register: port_policy_res
+
+- name: "Configure ports in port policy {{ policy_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/ServerRoles
+    api_body: "{{ {
+          'PortPolicy': port_policy_res.api_response.Moid,
+          'SlotId': item.0 | int,
+          'PortId': item.1 | int,
+          'Fec': 'Auto',
+          'AutoNegotiationDisabled': false
+        } | to_json }}"
+  loop: "{{ update_ucs_fi_port_policy_slot_id_list | product(update_ucs_fi_port_policy_port_id_list) | list }}"
+  register: port_configuring_res
+  when: regular_port_format is defined and regular_port_format
+
+- name: Extract aggregate ports and store unique values
+  ansible.builtin.set_fact:
+    aggregate_ports: "{{ update_ucs_fi_port_policy_port_id_list | map('split', '/') | map('first') | list | unique }}"
+  when: breakout_port_format is defined and breakout_port_format
+
+- name: "Configure breakout options in port policy {{ policy_name }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/PortModes
+    api_body: "{{ {
+          'PortPolicy': port_policy_res.api_response.Moid,
+          'SlotId': item.0 | int,
+          'PortIdStart': item.1 | int,
+          'PortIdEnd': item.1 | int,
+          'CustomMode': update_ucs_fi_port_policy_breakout_option
+        } | to_json }}"
+  loop: "{{ update_ucs_fi_port_policy_slot_id_list | product(aggregate_ports) | list }}"
+  register: port_configuring_breakout_option_res
+  when: breakout_port_format is defined and breakout_port_format
+
+- name: "Configure ports with breakout ports in port policy {{ policy_name }}"
+  vars:
+    aggregate_port_id: "{{ item.1.split('/')[0] }}"
+    port_id: "{{ item.1.split('/')[1] }}"
+  cisco.intersight.intersight_rest_api:
+    <<: *api_info
+    resource_path: /fabric/ServerRoles
+    api_body: "{{ {
+          'PortPolicy': port_policy_res.api_response.Moid,
+          'SlotId': item.0 | int,
+          'PortId': port_id | int,
+          'AggregatePortId': aggregate_port_id | int,
+          'Fec': 'Auto',
+          'AutoNegotiationDisabled': false
+        } | to_json }}"
+  loop: "{{ update_ucs_fi_port_policy_slot_id_list | product(update_ucs_fi_port_policy_port_id_list) | list }}"
+  register: port_configuring_breakout_res
+  when: breakout_port_format is defined and breakout_port_format
