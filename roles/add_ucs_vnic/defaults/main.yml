@@ -1,0 +1,7 @@
+---
+# defaults file for add_ucs_vnic
+add_ucs_vnic_related_operation: add_vnic_from_template
+
+# API authentication
+add_ucs_vnic_api_uri: 'https://intersight.com/api/v1'
+add_ucs_vnic_validate_certs: true
