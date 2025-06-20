@@ -1,0 +1,11 @@
+---
+- name: Test Cisco UCS deploy server profile in Intersight
+  hosts: localhost
+  vars:
+    deploy_ucs_server_profile_api_private_key: "{{ 'INTERSIGHT_API_PRIVATE_KEY' }}"
+    deploy_ucs_server_profile_api_key_id: "{{ 'INTERSIGHT_API_KEY_ID' }}"
+    deploy_ucs_server_profile_server_profiles_list: ['AC08-Server-Profile']
+    deploy_ucs_server_profile_reboot_for_activation: false
+    deploy_ucs_server_profile_deploy_policies: true
+  roles:
+    - deploy_ucs_server_profile

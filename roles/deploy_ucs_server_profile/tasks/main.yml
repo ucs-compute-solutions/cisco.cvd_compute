@@ -1,0 +1,4 @@
+---
+# Tasks file for the deploy_ucs_server_profile role
+- name: Deploy server profile - Day-2 Operation
+  ansible.builtin.include_tasks: "{{ deploy_ucs_server_profile_related_operation }}.yml"
