@@ -1,0 +1,34 @@
+---
+- name: Run FI query for Multiple Ports
+  ansible.builtin.include_tasks: ./fi_port_query.yml
+  when: ports is defined or port_range is defined
+  register: query_ucs_fi_available_ports_result
+
+- name: Count Available and Used Ports
+  ansible.builtin.set_fact:
+    query_ucs_fi_available_ports_total_ports: "{{ query_ucs_fi_port_configuration_filtered_ports | length }}"
+    query_ucs_fi_available_ports_available_ports: "{{ query_ucs_fi_port_configuration_filtered_ports
+    | selectattr('role', 'equalto', 'unknown') | list | length }}"
+    query_ucs_fi_available_ports_used_ports: "{{ query_ucs_fi_port_configuration_filtered_ports
+    | rejectattr('role', 'equalto', 'unknown') | list | length }}"
+
+- name: Fail if No Available Ports
+  ansible.builtin.fail:
+    msg: |
+      Provisioning cannot be proceeded for {{ current_fi }}.
+      Total queried ports: {{ query_ucs_fi_available_ports_total_ports }}
+      Available ports: {{ query_ucs_fi_available_ports_available_ports }}
+
+      Please check the Fabric Interconnect configuration and ensure all required ports are available.
+  when: query_ucs_fi_available_ports_available_ports | int != query_ucs_fi_available_ports_total_ports | int
+
+- name: Append provisioning success info to summary
+  ansible.builtin.set_fact:
+    ucs_fi_provisioning_summary: "{{ ucs_fi_provisioning_summary + [summary_entry] }}"
+  vars:
+    summary_entry:
+      fi_name: "{{ current_fi }}"
+      total_ports: "{{ query_ucs_fi_available_ports_total_ports }}"
+      available_ports: "{{ query_ucs_fi_available_ports_available_ports }}"
+      status: "Provisioning can proceed"
+  when: query_ucs_fi_available_ports_available_ports | int == query_ucs_fi_available_ports_total_ports | int

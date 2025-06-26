@@ -1,0 +1,40 @@
+---
+- name: Initialize Expanded Port List
+  ansible.builtin.set_fact:
+    expanded_ports: []
+
+- name: Process Port Ranges (Including Breakout Ports)
+  ansible.builtin.set_fact:
+    expanded_ports: "{{ expanded_ports + [{'port_id': port_id, 'slot_id': slot_id}] }}"
+  loop: "{{ range(port_range.split('-')[0] | int, port_range.split('-')[1] | int + 1) | list }}"
+  loop_control:
+    loop_var: port_id
+  when: port_range is defined and slot_id is defined
+
+- name: Extract Breakout Ports
+  ansible.builtin.set_fact:
+    breakout_ports: >-
+      {{
+        query_ucs_fi_port_configuration_all_ports
+        | selectattr('aggregate_port_Id', 'ne', 0)
+        | selectattr('slot_Id', 'equalto', slot_id)
+        | selectattr('aggregate_port_Id', 'ge', port_range.split('-')[0] | int)
+        | selectattr('aggregate_port_Id', 'le', port_range.split('-')[1] | int)
+        | list
+      }}
+  when: query_ucs_fi_port_configuration_all_ports is defined
+
+- name: Ensure Breakout Ports is a List
+  ansible.builtin.set_fact:
+    breakout_ports: "{{ breakout_ports | default([]) | list }}"
+
+- name: Convert Breakout Ports Format
+  ansible.builtin.set_fact:
+    expanded_ports: "{{ expanded_ports +
+    [{'port_id': item.aggregate_port_Id | string ~ '/' ~ item.port_Id.split('/')[-1] | string, 'slot_id': item.slot_Id}] }}"
+  loop: "{{ breakout_ports }}"
+  when: item.aggregate_port_Id != 0
+
+- name: Set Final Filtered Port List
+  ansible.builtin.set_fact:
+    query_ucs_fi_port_configuration_ports_fixed: "{{ expanded_ports }}"

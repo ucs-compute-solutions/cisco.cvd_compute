@@ -36,8 +36,8 @@ This is used to add a VLAN to a vNIC in Intersight.
     - name: Test Adding Vlan to a vNic in Intersight
       hosts: localhost
       vars:
-        add_ucs_vlan_to_vnic_api_private_key: "{{ lookup('env', 'INTERSIGHT_API_PRIVATE_KEY') }}"
-        add_ucs_vlan_to_vnic_api_key_id: "{{ lookup('env', 'INTERSIGHT_API_KEY_ID') }}"
+        add_ucs_vlan_to_vnic_api_private_key: "{{ INTERSIGHT_API_PRIVATE_KEY }}"
+        add_ucs_vlan_to_vnic_api_key_id: "{{ INTERSIGHT_API_KEY_ID }}"
         add_ucs_vlan_to_vnic_name_of_fi_vlan_policy: "AC08-6454-VLAN-Policy"
         add_ucs_vlan_to_vnic_vlan_multicast_policy: "AC08-MCAST"
         add_ucs_vlan_to_vnic_vlan_id: 3002

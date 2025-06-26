@@ -1,0 +1,142 @@
+---
+- name: Set API vars for FI Port Query
+  vars:
+    api_info: &api_info
+      api_private_key: "{{ query_ucs_fi_port_configuration_api_private_key | default(omit) }}"
+      api_key_id: "{{ query_ucs_fi_port_configuration_api_key_id | default(omit) }}"
+      api_uri: "{{ query_ucs_fi_port_configuration_api_uri | default(omit) }}"
+      validate_certs: "{{ query_ucs_fi_port_configuration_validate_certs | default(omit) }}"
+
+  block:
+    - name: Get Fabric Interconnect Details
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /network/ElementSummaries
+        query_params:
+          $filter: "SwitchType eq 'FabricInterconnect' and (Name eq '{{ current_fi }}')"
+          $top: 10
+        return_list: true
+      register: query_ucs_fi_port_configuration_fi_details
+      delegate_to: localhost
+
+    - name: Get Physical FC Ports for Fabric Interconnect
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /fc/PhysicalPorts
+        query_params:
+          $filter: "Ancestors.Moid eq '{{ query_ucs_fi_port_configuration_fi_details.api_response[0].Moid }}'"
+        return_list: true
+      register: query_ucs_fi_port_configuration_fc_physical_ports
+      delegate_to: localhost
+      when:
+        - query_ucs_fi_port_configuration_fi_details.api_response is defined
+        - query_ucs_fi_port_configuration_fi_details.api_response | length > 0
+
+    - name: Get Physical Ethernet Ports for Fabric Interconnect
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /ether/PhysicalPorts
+        query_params:
+          $filter: "Ancestors.Moid eq '{{ query_ucs_fi_port_configuration_fi_details.api_response[0].Moid }}'"
+        return_list: true
+      register: query_ucs_fi_port_configuration_eth_physical_ports
+      delegate_to: localhost
+      when:
+        - query_ucs_fi_port_configuration_fi_details.api_response is defined
+        - query_ucs_fi_port_configuration_fi_details.api_response | length > 0
+
+    - name: Initialize Port List Variables
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_fc_ports_filtered: []
+        query_ucs_fi_port_configuration_eth_ports_filtered: []
+        breakout_ports: {}
+
+    - name: Append FC Port Data
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_fc_ports_filtered: "{{ query_ucs_fi_port_configuration_fc_ports_filtered + [ {
+          'port_Id': (item.AggregatePortId != 0) | ternary(item.AggregatePortId ~ '/' ~ item.PortId, item.PortId | string),
+          'aggregate_port_Id': item.AggregatePortId,
+          'slot_Id': item.SlotId,
+          'class_id': item.ClassId,
+          'oper_state': item.OperState,
+          'oper_speed': item.OperSpeed,
+          'admin_state': item.AdminState,
+          'switch_id': item.SwitchId,
+          'port_group': item.PortGroup,
+          'role': item.Role,
+          'parent_port': (item.AggregatePortId != 0) | ternary(item.AggregatePortId, 'Physical Port')
+          }] }}"
+      loop: "{{ query_ucs_fi_port_configuration_fc_physical_ports.api_response | default([]) }}"
+      when: item.PortId is defined and item.SlotId is defined
+
+    - name: Append Ethernet Port Data
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_eth_ports_filtered: "{{ query_ucs_fi_port_configuration_eth_ports_filtered + [ {
+          'port_Id': (item.AggregatePortId != 0) | ternary(item.AggregatePortId ~ '/' ~ item.PortId, item.PortId | string),
+          'aggregate_port_Id': item.AggregatePortId,
+          'slot_Id': item.SlotId,
+          'class_id': item.ClassId,
+          'oper_state': item.OperState,
+          'oper_speed': item.OperSpeed,
+          'admin_state': item.AdminState,
+          'switch_id': item.SwitchId,
+          'port_group': item.PortGroup,
+          'role': item.Role,
+          'parent_port': (item.AggregatePortId != 0) | ternary(item.AggregatePortId, 'Physical Port')
+          }] }}"
+      loop: "{{ query_ucs_fi_port_configuration_eth_physical_ports.api_response | default([]) }}"
+      when: item.PortId is defined and item.SlotId is defined
+
+    - name: Group Breakout Ports Under Physical Ports
+      ansible.builtin.set_fact:
+        breakout_ports: "{{ breakout_ports | combine({item.aggregate_port_Id: (breakout_ports[item.aggregate_port_Id] | default([])) + [item]}) }}"
+      loop: "{{ query_ucs_fi_port_configuration_eth_ports_filtered }}"
+      when: item.aggregate_port_Id != 0
+
+    - name: Merge FC and Ethernet Port Data
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_all_ports: "{{ query_ucs_fi_port_configuration_fc_ports_filtered +
+         query_ucs_fi_port_configuration_eth_ports_filtered }}"
+
+    - name: Initialize `query_ucs_fi_port_configuration_filtered_ports` List
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_filtered_ports: []
+
+    # If `ports` is undefined, return all ports
+    - name: Display All Ports if No Filter is Provided
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_filtered_ports: "{{ query_ucs_fi_port_configuration_all_ports }}"
+      when: ports is not defined and port_range is not defined
+
+    - name: Initialize `query_ucs_fi_port_configuration_ports_fixed` List
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_ports_fixed: []
+
+    - name: Filter port list
+      ansible.builtin.include_tasks: port_list.yml
+      when: ports is defined
+
+    - name: Filter port range
+      ansible.builtin.include_tasks: port_range.yml
+      when: port_range is defined and slot_id is defined
+
+    - name: Filter Ports Based on User Input
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_filtered_ports: "{{ query_ucs_fi_port_configuration_filtered_ports + filtered_ports }}"
+      vars:
+        filtered_ports: "{{ query_ucs_fi_port_configuration_all_ports
+                   | selectattr('port_Id', 'equalto', item.port_id | string)
+                   | selectattr('slot_Id', 'equalto', item.slot_id)
+                   | list }}"
+      loop: "{{ query_ucs_fi_port_configuration_ports_fixed }}"
+      loop_control:
+        label: "Filtering Port {{ item.port_id }} in Slot {{ item.slot_id }}"
+      when: query_ucs_fi_port_configuration_ports_fixed | length > 0
+
+    - name: Append FI port query result to summary
+      ansible.builtin.set_fact:
+        query_ucs_fi_port_configuration_details: "{{ query_ucs_fi_port_configuration_details + [summary_entry] }}"
+      vars:
+        summary_entry:
+          fi_name: "{{ current_fi }}"
+          filtered_ports: "{{ query_ucs_fi_port_configuration_filtered_ports }}"

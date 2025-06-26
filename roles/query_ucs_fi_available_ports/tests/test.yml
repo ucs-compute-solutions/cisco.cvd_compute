@@ -1,0 +1,27 @@
+---
+- name: Query UCS Fabric Interconnect Provisioning
+  hosts: localhost
+  gather_facts: false
+  vars:
+    query_ucs_fi_available_ports_api_private_key: "{{ INTERSIGHT_API_PRIVATE_KEY }}"
+    query_ucs_fi_available_ports_api_key_id: "{{ INTERSIGHT_API_KEY_ID }}"
+    query_ucs_fi_available_ports_api_uri: "https://intersight.com/api/v1"
+    query_ucs_fi_available_ports_validate_certs: true
+    query_ucs_fi_available_ports_fi_list: ["AC08-6454 FI-A", "AC08-6454 FI-B"]
+    ports:
+      - port_id: 49
+        slot_id: 1
+      - port_id: 51
+        slot_id: 1
+      - port_id: 52/1
+        slot_id: 1
+      - port_id: 52/2
+        slot_id: 1
+      - port_id: 52/3
+        slot_id: 1
+      - port_id: 52/4
+        slot_id: 1
+  tasks:
+    - name: Run Query UCS FI Available Ports
+      ansible.builtin.include_role:
+        name: query_ucs_fi_available_ports

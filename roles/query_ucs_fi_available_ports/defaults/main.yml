@@ -1,0 +1,3 @@
+# API authentication
+query_ucs_fi_available_ports_api_uri: 'https://intersight.com/api/v1'
+query_ucs_fi_available_ports_validate_certs: true

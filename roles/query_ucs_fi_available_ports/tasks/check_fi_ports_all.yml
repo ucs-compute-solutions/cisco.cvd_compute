@@ -1,0 +1,73 @@
+---
+- name: Set API vars for FI Port Query
+  vars:
+    api_info: &api_info
+      api_private_key: "{{ query_ucs_fi_available_ports_api_private_key | default(omit) }}"
+      api_key_id: "{{ query_ucs_fi_available_ports_api_key_id | default(omit) }}"
+      api_uri: "{{ query_ucs_fi_available_ports_api_uri | default(omit) }}"
+      validate_certs: "{{ query_ucs_fi_available_ports_validate_certs | default(omit) }}"
+
+  block:
+    - name: Retrieve Fabric Interconnect Information
+      cisco.intersight.intersight_rest_api:
+        <<: *api_info
+        resource_path: /network/ElementSummaries
+        query_params:
+          $filter: "SwitchType eq 'FabricInterconnect' and Name eq '{{ current_fi }}'"
+          $top: 10
+        return_list: true  # Ensures API response is a list
+      register: query_ucs_fi_available_ports_fi_data
+
+    - name: Count Total, Used, and Available Ports
+      ansible.builtin.set_fact:
+        query_ucs_fi_available_ports_total_ports: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumEtherPorts
+        | int + query_ucs_fi_available_ports_fi_data.api_response[0].NumFcPorts | int }}"
+        query_ucs_fi_available_ports_used_ports: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumEtherPortsConfigured
+        | int + query_ucs_fi_available_ports_fi_data.api_response[0].NumFcPortsConfigured | int }}"
+
+    - name: Count Available Ports
+      ansible.builtin.set_fact:
+        query_ucs_fi_available_ports_available_ports: "{{ query_ucs_fi_available_ports_total_ports | int - query_ucs_fi_available_ports_used_ports | int }}"
+
+    - name: FI Switch Ports Information
+      ansible.builtin.debug:
+        msg:
+          ModTime: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].ModTime }}"
+          Model: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].Model }}"
+          Moid: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].Moid }}"
+          Name: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].Name }}"
+          NumEtherPorts: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumEtherPorts }}"
+          NumEtherPortsConfigured: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumEtherPortsConfigured }}"
+          NumEtherPortsLinkUp: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumEtherPortsLinkUp }}"
+          NumExpansionModules: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumExpansionModules }}"
+          NumFcPorts: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumFcPorts }}"
+          NumFcPortsConfigured: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumFcPortsConfigured }}"
+          NumFcPortsLinkUp: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].NumFcPortsLinkUp }}"
+          SwitchId: "{{ query_ucs_fi_available_ports_fi_data.api_response[0].SwitchId }}"
+
+    - name: Port Summary
+      ansible.builtin.debug:
+        msg:
+          Total Ports: "{{ query_ucs_fi_available_ports_total_ports }}"
+          Used Ports: "{{ query_ucs_fi_available_ports_used_ports }}"
+          Available Ports: "{{ query_ucs_fi_available_ports_available_ports }}"
+
+    - name: Fail if No Available Ports
+      ansible.builtin.fail:
+        msg: "All ports are occupied. Provisioning cannot proceed."
+      when: query_ucs_fi_available_ports_available_ports | int == 0
+
+    - name: Provisioning Check
+      ansible.builtin.debug:
+        msg: "Provisioning  for '{{ current_fi }}' can proceed. {{ query_ucs_fi_available_ports_available_ports }} ports are available."
+      when: query_ucs_fi_available_ports_available_ports | int > 0
+
+    - name: Append provisioning success info to summary
+      ansible.builtin.set_fact:
+        ucs_fi_provisioning_summary: "{{ ucs_fi_provisioning_summary + [summary_entry] }}"
+      vars:
+        summary_entry:
+          fi_name: "{{ current_fi }}"
+          total_ports: "{{ query_ucs_fi_available_ports_total_ports }}"
+          available_ports: "{{ query_ucs_fi_available_ports_available_ports }}"
+          status: "Provisioning can proceed"

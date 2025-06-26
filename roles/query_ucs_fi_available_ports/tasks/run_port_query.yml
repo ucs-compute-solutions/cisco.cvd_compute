@@ -1,0 +1,8 @@
+---
+- name: Provision check for all FI ports
+  ansible.builtin.include_tasks: check_fi_ports_all.yml
+  when: ports is not defined and port_range is not defined
+
+- name: Provision check for selected FI ports
+  ansible.builtin.include_tasks: check_fi_ports_selected.yml
+  when: ports is defined or port_range is defined

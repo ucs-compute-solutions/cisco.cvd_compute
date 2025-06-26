@@ -1,0 +1,14 @@
+---
+- name: Initialize provisioning result list
+  ansible.builtin.set_fact:
+    ucs_fi_provisioning_summary: []
+
+- name: Loop through each Fabric Interconnect
+  ansible.builtin.include_tasks: "run_port_query.yml"
+  loop: "{{ query_ucs_fi_available_ports_fi_list }}"
+  loop_control:
+    loop_var: current_fi
+
+- name: Display Provisioning Summary
+  ansible.builtin.debug:
+    msg: "{{ ucs_fi_provisioning_summary }}"
